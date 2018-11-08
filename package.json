@@ -1,7 +1,7 @@
 {
   "name": "tre-sortable-list",
   "version": "1.0.0",
-  "description": "",
+  "description": "Manually and automatically sorted lists",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -10,11 +10,30 @@
     "type": "git",
     "url": "git+https://github.com/regular/tre-sortable-list.git"
   },
-  "keywords": [],
+  "keywords": [
+    "tre",
+    "ssb",
+    "ssb-revisions"
+  ],
   "author": "Jan Bölsche <jan@lagomorph.de> (https://regular.codes/)",
   "license": "ISC",
   "bugs": {
     "url": "https://github.com/regular/tre-sortable-list/issues"
   },
-  "homepage": "https://github.com/regular/tre-sortable-list#readme"
+  "homepage": "https://github.com/regular/tre-sortable-list#readme",
+  "dependencies": {
+    "mutant": "^3.22.1"
+  },
+  "devDependencies": {
+    "collect-mutations": "^1.0.0",
+    "pull-stream": "^3.6.9",
+    "ssb-revisions": "^1.0.1",
+    "tre-client": "^1.1.0"
+  },
+  "tre-init": {
+    "plugins": {
+      "tre-client": true,
+      "ssb-revisions": true
+    }
+  }
 }
