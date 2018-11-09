@@ -3,6 +3,7 @@ const computed = require('mutant/computed')
 const Value = require('mutant/value')
 const MutantMap = require('mutant/map')
 const pull = require('pull-stream')
+const setStyles = require('module-styles')('tre-sortable-list')
 
 function manualSort(kva, kvb) {
   const a = manualOrder(kva)
@@ -21,9 +22,9 @@ function manualOrder(kv) {
 
 
 function comparer(a, b) {
-  if (a === b) return true
-  return false
+  return a === b
 }
+
 module.exports = function(opts) {
   opts = opts || {}
   const sorterObv = opts.sorterObv || Value(manualSort)
@@ -46,39 +47,43 @@ module.exports = function(opts) {
 
   function Render(sorted_array, ctx) {
     return function (kv) {
-      console.log('kv', kv)
       const id = revRoot(kv)
-      return h(
+      const el = h(
         'li.drag-wrap', {
           draggable: computed([sorterObv], s => s == manualSort ),
           'ev-dragstart': e => {
-            e.target.classList.add('dragged')
+            if (e.target !== el) return
+            document.body.classList.add('dragging')
+            el.classList.add('dragged')
             e.dataTransfer.setData('text/plain', id)
           },
           'ev-dragend': e => {
-            e.target.classList.remove('dragged')
+            if (e.target !== el) return
+            el.classList.remove('dragged')
             const els = document.body.querySelectorAll('[draggable].over')
-            ;[].slice.call(els).forEach( el=>el.classList.remove('over'))
+            ;[].slice.call(els).forEach( el=>el.classList.remove('over', 'above', 'below'))
+            document.body.classList.remove('dragging')
           },
-          'ev-dragenter': e => e.target.classList.add('over'),
-          'ev-dragleave': e => e.target.classList.remove('over'),
+          'ev-dragenter': e => el.classList.add('over'),
+          'ev-dragleave': e => el.classList.remove('over', 'above', 'below'),
           'ev-dragover': e => {
             e.preventDefault()
             e.dataTransfer.dropEffect = 'move'
-            const bb = e.target.getBoundingClientRect()
+            const bb = el.getBoundingClientRect()
             const rely = (e.clientY - bb.top) / bb.height
             let cls = ['above', 'below']
             if (rely > 0.5) cls = cls.reverse()
-            e.target.classList.add(cls[0])
-            e.target.classList.remove(cls[1])
+            el.classList.add(cls[0])
+            el.classList.remove(cls[1])
             return false
           },
           'ev-drop': e => {
-            e.stopPropagation()
+            //if (e.target !== el) return false
             const dropped_id = e.dataTransfer.getData('text/plain')
-            const where = e.target.classList.contains('above') ? 'above' : 'below'
+            const where = el.classList.contains('above') ? 'above' : 'below'
             if (dropped_id == id) {
               console.log(`dropped ${dropped_id} onto itself.`)
+              e.stopPropagation()
               return false
             }
 
@@ -91,6 +96,7 @@ module.exports = function(opts) {
               const indices = [our_idx, other_idx].sort()
               if (indices.map(i=>revRoot(arr[i])).includes(dropped_id)) {
                 console.log(`dropped ${dropped_id} onto itself.`)
+                e.stopPropagation()
                 return false
               }
               const lower = indices[0] >= 0 ? manualOrder(arr[indices[0]]) : manualOrder(arr[0]) - 10
@@ -101,25 +107,31 @@ module.exports = function(opts) {
                 console.log('need to add manual order index')
                 return addManualIndex( arr, err=>{
                   if (err) return console.error(err.message)
-                  update()
+                  setTimeout(update, 100)
                 })
               }
               console.log('dont need to add manual order index')
               
               const new_order = middle(upper,lower)
               const dropped_kv = arr.find(o=>revRoot(o) == dropped_id)
+              if (!dropped_kv) {
+                console.log('foreign object')
+                return false
+              }
               console.log('last rev:', dropped_kv.key)
               patch(dropped_kv.key, {'manual-order-index': new_order}, err => {
                 if (err) console.error(err.message)
               })
             }
             update()
+            e.stopPropagation()
 
             return false
           }
         },
         renderItem(kv, ctx)
       )
+      return el
     }
   }
 
@@ -159,7 +171,7 @@ function middle(upper, lower) {
 }
 
 function addStyles() {
-  document.body.appendChild(h('style', `
+  setStyles(`
     .drag-wrap[draggable=true] {
       user-select: none;
       cursor: move;
@@ -167,11 +179,17 @@ function addStyles() {
     .drag-wrap[draggable].dragged {
       opacity: 0.3
     }
+    .dragging .drag-wrap>* {
+      pointer-events: none;
+    }
+    .dragging .drag-wrap .drag-wrap {
+      pointer-events: all;
+    }
     .drag-wrap[draggable].over.above {
       border-top: 1em solid blue;
     }
     .drag-wrap[draggable].over.below {
       border-bottom: 1em solid blue;
     }
-  `))
+  `)
 }
