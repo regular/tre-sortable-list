@@ -4,83 +4,125 @@ const Value = require('mutant/value')
 const MutantMap = require('mutant/map')
 const pull = require('pull-stream')
 const setStyles = require('module-styles')('tre-sortable-list')
-
-function manualSort(kva, kvb) {
-  const a = manualOrder(kva)
-  const b = manualOrder(kvb)
-  return a - b
-}
-
-function revRoot(kv) {
-  if (!kv) return ''
-  return kv.value.content && kv.value.content.revisionRoot || kv.key
-}
-
-function manualOrder(kv) {
-  return kv.value.content && kv.value.content['manual-order-index'] || 0
-}
-
-
-function comparer(a, b) {
-  return a === b
-}
+const pbox = require('padding-box')
+const crypto = require('crypto')
 
 module.exports = function(opts) {
   opts = opts || {}
-  const sorterObv = opts.sorterObv || Value(manualSort)
   const renderItem = opts.renderItem || function(kv) { return h('span', kv.key) }
   const patch = opts.patch || function(key, patch, cb) { cb(null) }
+  const manualOrder = opts.manualOrder || {
+    get: kv => kv.value.content && kv.value.content['manual-order-index'] || 0,
+    set: (kv, index, cb) => {
+      patch(kv.key, {'manual-order-index': index}, cb)
+    }
+  }
+  const dragged = opts.draggedObv || Value() // id of the item being dragged
+  const over = opts.overObv || Value()    // id of the item under the dragged item
+  const codec = opts.codec || {
+    type: 'application/json',
+    encode: JSON.stringify,
+    decode: JSON.parse
+  }
+  const getId = opts.id || revRoot
+  const contains = opts.contains || function(container_kv, item_kv) {
+    return item_kv.value.content.branch == getId(container_kv)
+  }
+
+  function manualSort(kva, kvb) {
+    const a = manualOrder.get(kva)
+    const b = manualOrder.get(kvb)
+    return a - b
+  }
+  const sorterObv = opts.sorterObv || Value(manualSort)
 
   addStyles()
 
   function addManualIndex(arr, cb) {
+    console.log('addManualIndex')
     let index = 0
     pull(
       pull.values(arr),
       pull.asyncMap( (kv, cb) => {
         index += 100
-        patch(kv.key, {'manual-order-index': index}, cb)
+        manualOrder.set(kv, index, cb)
       }),
       pull.collect(cb)
     )
   }
 
   function Render(sorted_array, ctx) {
+    const container_kv = ctx.path && ctx.path.length && ctx.path.slice(-1)[0]
+
     return function (kv) {
-      const id = revRoot(kv)
+      const id = getId(kv)
+      
+      const classList = computed([over, dragged], (o, d) => {
+        if (d && getId(d) == id) return ['dragged']
+        if (o && getId(o) == id) {
+          let classes = ['over']
+          if (d && container_kv && contains(container_kv, d)) classes.push('sibling')
+          classes = classes.concat(o.classes)
+          return classes
+        }
+        return []
+      })
+
       const el = h(
         'li.drag-wrap', {
-          draggable: computed([sorterObv], s => s == manualSort ),
+          draggable: computed(sorterObv, s => s == manualSort),
+          classList,
           'ev-dragstart': e => {
             if (e.target !== el) return
-            document.body.classList.add('dragging')
-            el.classList.add('dragged')
+            dragged.set(kv)
             e.dataTransfer.setData('text/plain', id)
+            e.dataTransfer.setData(codec.type, codec.encode(kv))
           },
           'ev-dragend': e => {
             if (e.target !== el) return
-            el.classList.remove('dragged')
-            const els = document.body.querySelectorAll('[draggable].over')
-            ;[].slice.call(els).forEach( el=>el.classList.remove('over', 'above', 'below'))
             document.body.classList.remove('dragging')
+            dragged.set(null)
+            over.set(null)
           },
-          'ev-dragenter': e => el.classList.add('over'),
-          'ev-dragleave': e => el.classList.remove('over', 'above', 'below'),
+          'ev-dragenter': e => {
+            e.stopPropagation()
+          },
+          'ev-dragleave': e => {
+            if (over() && getId(over()) == id) over.set(null)
+            e.stopPropagation()
+          },
           'ev-dragover': e => {
+            const classes = []
+            // TODO: remove after timeout?
+            document.body.classList.add('dragging')
             e.preventDefault()
-            e.dataTransfer.dropEffect = 'move'
-            const bb = el.getBoundingClientRect()
+            e.stopPropagation()
+            e.dataTransfer.dropEffect = 'all'
+            const bb = pbox(el)
             const rely = (e.clientY - bb.top) / bb.height
             let cls = ['above', 'below']
             if (rely > 0.5) cls = cls.reverse()
-            el.classList.add(cls[0])
-            el.classList.remove(cls[1])
+
+            // dead zone in the middle to stop flickering
+            if (Math.abs(rely - 0.5) > 0.1) {
+              classes.push(cls[0])
+            }
+            over.set(Object.assign({}, kv, {classes}))
             return false
           },
+
           'ev-drop': e => {
-            //if (e.target !== el) return false
+            console.log('drop')
+            e.preventDefault()
+            console.log('dropped datatransfer items:', [].slice.apply(e.dataTransfer.items))
+            console.log('dropped datatransfer files:', [].slice.apply(e.dataTransfer.files))
+            console.log('dropped datatransfer types:', e.dataTransfer.types)
+            console.log('dropped ctx:', ctx)
             const dropped_id = e.dataTransfer.getData('text/plain')
-            const where = el.classList.contains('above') ? 'above' : 'below'
+
+            const where = over().classes.includes('above') ? 'above' : 'below'
+            over.set(null)
+
             if (dropped_id == id) {
               console.log(`dropped ${dropped_id} onto itself.`)
               e.stopPropagation()
@@ -90,39 +132,40 @@ module.exports = function(opts) {
             function update() {
               const arr = sorted_array()
               const our_idx = arr.indexOf(
-                arr.find(o=>revRoot(o) == id)
+                arr.find(o=>getId(o) == id)
               )
               const other_idx = our_idx + (where == 'above' ? -1 : +1)
               const indices = [our_idx, other_idx].sort()
-              if (indices.map(i=>revRoot(arr[i])).includes(dropped_id)) {
+              if (indices.map(i=>getId(arr[i])).includes(dropped_id)) {
                 console.log(`dropped ${dropped_id} onto itself.`)
-                e.stopPropagation()
-                return false
+                return
               }
-              const lower = indices[0] >= 0 ? manualOrder(arr[indices[0]]) : manualOrder(arr[0]) - 10
-              const upper = indices[1] < arr.length ? manualOrder(arr[indices[1]]) : manualOrder(arr[arr.length-1]) + 10
+              const lower = indices[0] >= 0 ? manualOrder.get(arr[indices[0]]) : manualOrder.get(arr[0]) - 10
+              const upper = indices[1] < arr.length ? manualOrder.get(arr[indices[1]]) : manualOrder.get(arr[arr.length-1]) + 10
               console.log(`dropped ${dropped_id} ${where} ${id}, between index ${indices[0]} and ${indices[1]}, sort-index between ${lower} and ${upper}`)
 
               if (lower == upper) {
                 console.log('need to add manual order index')
-                return addManualIndex( arr, err=>{
+                addManualIndex( arr, err=>{
                   if (err) return console.error(err.message)
-                  setTimeout(update, 100)
+                  setTimeout(update, 1000)
                 })
+                return
               }
               console.log('dont need to add manual order index')
               
               const new_order = middle(upper,lower)
-              const dropped_kv = arr.find(o=>revRoot(o) == dropped_id)
+              const dropped_kv = arr.find(o=>getId(o) == dropped_id)
               if (!dropped_kv) {
                 console.log('foreign object')
                 return false
               }
               console.log('last rev:', dropped_kv.key)
-              patch(dropped_kv.key, {'manual-order-index': new_order}, err => {
+              manualOrder.set(dropped_kv, new_order, err => {
                 if (err) console.error(err.message)
               })
             }
+
             update()
             e.stopPropagation()
 
@@ -137,20 +180,20 @@ module.exports = function(opts) {
 
   function transformArray(mutantArray) {
     return computed([mutantArray, sorterObv], (a, s) => {
-      console.log(`sort ${JSON.stringify(a)}`)
       return a.sort(s)
     })
   }
 
-
-  return function(mutantArray, ctx) {
+  const ret = function(mutantArray, ctx) {
     const sortedArray = transformArray(mutantArray)
     const sortedElements = MutantMap(sortedArray, Render(sortedArray, ctx), {comparer})
-    return h('ul', sortedElements)
+    const content = computed(sortedElements, se => se.length ? se : opts.placeholder || [])
+    return h('ul.tre-sortable-list', content)
   }
-}
 
-module.exports.manualSort = manualSort
+  ret.manualSort = manualSort
+  return ret
+}
 
 // -- utils
 
@@ -170,26 +213,71 @@ function middle(upper, lower) {
   return c
 }
 
+function revRoot(kv) {
+  if (!kv) return ''
+  return kv.value.content && kv.value.content.revisionRoot || kv.key
+}
+
+
+function comparer(a, b) {
+  return a === b
+}
+
 function addStyles() {
   setStyles(`
     .drag-wrap[draggable=true] {
       user-select: none;
-      cursor: move;
     }
-    .drag-wrap[draggable].dragged {
-      opacity: 0.3
+    .drag-wrap[draggable=true].dragged {
+      opacity: 0.3;
+      height: 1px;
     }
     .dragging .drag-wrap>* {
       pointer-events: none;
     }
     .dragging .drag-wrap .drag-wrap {
-      pointer-events: all;
+      pointer-events: auto;
     }
     .drag-wrap[draggable].over.above {
-      border-top: 1em solid blue;
+      border-style: solid;
+      border-width: 0;
+      border-top-width: 1em;
+      transition: border-top-width .25s ease-in-out;
     }
     .drag-wrap[draggable].over.below {
-      border-bottom: 1em solid blue;
+      border-style: solid;
+      border-width: 0;
+      border-bottom-width: 1em;
+      transition: border-bottom-width .25s ease-in-out;
     }
+    
+    .drag-wrap[draggable].over {
+      border-image: repeating-linear-gradient(
+        45deg,
+        rgba(0, 0, 0, 0),
+        rgba(0, 0, 0, 0) 5px,
+        rgba(200, 200, 0, 0.5) 5px,
+        rgba(200, 200, 0, 0.5) 10px,
+        rgba(0, 0, 0, 0) 10px,
+        rgba(0, 0, 0, 0) 15px,
+        rgba(200, 200, 0, 0.5) 15px,
+        rgba(200, 200, 0, 0.5) 20px
+      ) 20% round;
+    }
+
+    .drag-wrap[draggable].over.sibling {
+      border-image: repeating-linear-gradient(
+        45deg,
+        rgba(0, 0, 0, 0),
+        rgba(0, 0, 0, 0) 5px,
+        rgba(0, 0, 0, 0.1) 5px,
+        rgba(0, 0, 0, 0.1) 10px,
+        rgba(0, 0, 0, 0) 10px,
+        rgba(0, 0, 0, 0) 15px,
+        rgba(0, 0, 0, 0.1) 15px,
+        rgba(0, 0, 0, 0.1) 20px
+      ) 20% round;
+    }
+
   `)
 }

@@ -23,7 +23,8 @@
   "homepage": "https://github.com/regular/tre-sortable-list#readme",
   "dependencies": {
     "module-styles": "^1.0.0",
-    "mutant": "^3.22.1"
+    "mutant": "^3.22.1",
+    "padding-box": "^1.0.0"
   },
   "devDependencies": {
     "collect-mutations": "^1.0.0",
