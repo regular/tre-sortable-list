@@ -118,6 +118,8 @@ module.exports = function(opts) {
             console.log('dropped datatransfer files:', [].slice.apply(e.dataTransfer.files))
             console.log('dropped datatransfer types:', e.dataTransfer.types)
             console.log('dropped ctx:', ctx)
+            // TODO: decode JSON
+            // or use mime type x-secure-scuttlebutt/ref
             const dropped_id = e.dataTransfer.getData('text/plain')
 
             const where = over().classes.includes('above') ? 'above' : 'below'
@@ -158,6 +160,17 @@ module.exports = function(opts) {
               const dropped_kv = arr.find(o=>getId(o) == dropped_id)
               if (!dropped_kv) {
                 console.log('foreign object')
+                if (opts.on_drop) {
+                  opts.on_drop({
+                    dataTransfer: e.dataTransfer,
+                    ctx,
+                    where: {
+                      preposition: where,
+                      relativeTo: id,
+                      manual_order_index: new_order
+                    }
+                  })
+                }
                 return false
               }
               console.log('last rev:', dropped_kv.key)
