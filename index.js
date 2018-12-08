@@ -26,6 +26,7 @@ module.exports = function(opts) {
   }
   const getId = opts.id || revRoot
   const contains = opts.contains || function(container_kv, item_kv) {
+    // TODO: branch might be an array!
     return item_kv.value.content.branch == getId(container_kv)
   }
 
@@ -193,7 +194,7 @@ module.exports = function(opts) {
 
   function transformArray(mutantArray) {
     return computed([mutantArray, sorterObv], (a, s) => {
-      return a.sort(s)
+      return a.slice().sort(s)
     })
   }
 
@@ -233,7 +234,8 @@ function revRoot(kv) {
 
 
 function comparer(a, b) {
-  return a === b
+  console.warn('sortable-list cmp', a,b)
+  return (a && a.key) == (b && b.key)
 }
 
 function addStyles() {
