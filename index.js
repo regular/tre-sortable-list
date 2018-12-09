@@ -234,8 +234,16 @@ function revRoot(kv) {
 
 
 function comparer(a, b) {
-  console.warn('sortable-list cmp', a,b)
-  return (a && a.key) == (b && b.key)
+  /*
+  It might be beneficial to overall perofrmance, to make slightly deeper comparison of
+  - keys
+  - meta (wihtout prototype-chain)
+  - keys of prototype chain
+
+  It's not enough to just compare akey to b.key because changes in
+  prototypes would slip through.
+  */
+  return a === b
 }
 
 function addStyles() {
