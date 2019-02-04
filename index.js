@@ -26,8 +26,9 @@ module.exports = function(opts) {
   }
   const getId = opts.id || revRoot
   const contains = opts.contains || function(container_kv, item_kv) {
-    // TODO: branch might be an array!
-    return item_kv.value.content.branch == getId(container_kv)
+    const branch = item_kv.value.content.branch 
+    const branches = Array.isArray(branch) ? branch : [branch]
+    return branches.includes(getId(container_kv))
   }
 
   function manualSort(kva, kvb) {
@@ -53,6 +54,7 @@ module.exports = function(opts) {
   }
 
   function Render(sorted_array, ctx) {
+    ctx = ctx || {}
     const container_kv = ctx.path && ctx.path.length && ctx.path.slice(-1)[0]
 
     return function (kv) {
@@ -77,7 +79,7 @@ module.exports = function(opts) {
             if (e.target !== el) return
             dragged.set(kv)
             e.dataTransfer.setData('text/plain', id)
-            e.dataTransfer.setData(codec.type, codec.encode(kv))
+            e.dataTransfer.setData(codec.type, codec.encode(Object.assign({}, kv, {ctx})))
           },
           'ev-dragend': e => {
             if (e.target !== el) return
