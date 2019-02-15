@@ -71,13 +71,18 @@ module.exports = function(opts) {
         return []
       })
 
-      const el = h(
+      let el 
+      el = h(
         'li.drag-wrap', {
-          draggable: computed(sorterObv, s => s == manualSort),
+          //draggable: computed(sorterObv, s => s == manualSort),
+          draggable: true,
           classList,
           'ev-dragstart': e => {
+            //e.preventDefault()
+            //e.stopPropagation()
             if (e.target !== el) return
             dragged.set(kv)
+            console.warn('!dragstart ctx', ctx)
             e.dataTransfer.setData('text/plain', id)
             e.dataTransfer.setData(codec.type, codec.encode(Object.assign({}, kv, {ctx})))
           },
@@ -88,6 +93,7 @@ module.exports = function(opts) {
             over.set(null)
           },
           'ev-dragenter': e => {
+            console.warn('drag enter')
             e.stopPropagation()
           },
           'ev-dragleave': e => {
@@ -95,6 +101,7 @@ module.exports = function(opts) {
             e.stopPropagation()
           },
           'ev-dragover': e => {
+            console.warn('drag over')
             const classes = []
             // TODO: remove after timeout?
             document.body.classList.add('dragging')
