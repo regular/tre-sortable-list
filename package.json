@@ -1,6 +1,6 @@
 {
   "name": "tre-sortable-list",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "description": "Manually and automatically sorted lists",
   "main": "index.js",
   "scripts": {
