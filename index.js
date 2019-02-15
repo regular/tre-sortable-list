@@ -79,12 +79,17 @@ module.exports = function(opts) {
           classList,
           'ev-dragstart': e => {
             //e.preventDefault()
-            //e.stopPropagation()
-            if (e.target !== el) return
-            dragged.set(kv)
-            console.warn('!dragstart ctx', ctx)
+            e.stopPropagation()
+            if (e.target !== el) {
+              return
+            }
+            setTimeout( ()=> {
+              dragged.set(kv)
+            }, 0)
+            console.warn('Dragstart ctx', ctx)
             e.dataTransfer.setData('text/plain', id)
             e.dataTransfer.setData(codec.type, codec.encode(Object.assign({}, kv, {ctx})))
+            e.dataTransfer.effectAllowed = 'move'
           },
           'ev-dragend': e => {
             if (e.target !== el) return
@@ -97,6 +102,7 @@ module.exports = function(opts) {
             e.stopPropagation()
           },
           'ev-dragleave': e => {
+            console.warn('drag leave')
             if (over() && getId(over()) == id) over.set(null)
             e.stopPropagation()
           },
