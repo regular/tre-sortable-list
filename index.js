@@ -12,7 +12,7 @@ module.exports = function(opts) {
   const renderItem = opts.renderItem || function(kv) { return h('span', kv.key) }
   const patch = opts.patch || function(key, patch, cb) { cb(null) }
   const manualOrder = opts.manualOrder || {
-    get: kv => kv.value.content && kv.value.content['manual-order-index'] || 0,
+    get: kv => kv && kv.value.content['manual-order-index'] || 0,
     set: (kv, index, cb) => {
       patch(kv.key, {'manual-order-index': index}, cb)
     }
