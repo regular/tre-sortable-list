@@ -58,6 +58,7 @@ module.exports = function(opts) {
     const container_kv = ctx.path && ctx.path.length && ctx.path.slice(-1)[0]
 
     return function (kv) {
+      if (!kv) return []
       const id = getId(kv)
       
       const classList = computed([over, dragged], (o, d) => {
