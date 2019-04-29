@@ -216,7 +216,7 @@ module.exports = function(opts) {
 
   const ret = function(mutantArray, ctx) {
     const sortedArray = transformArray(mutantArray)
-    const sortedElements = MutantMap(sortedArray, Render(sortedArray, ctx), {comparer, maxTime: 200})
+    const sortedElements = MutantMap(sortedArray, Render(sortedArray, ctx), {comparer, maxTime: opts.maxTime})
     const content = computed(sortedElements, se => se.length ? se : opts.placeholder || [])
     return h('ul.tre-sortable-list', content)
   }
